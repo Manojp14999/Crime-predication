@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crime Prediction – Mysuru District</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">🔍</span>
+      <span class="brand-text">CrimeWatch<br><small>Mysuru District</small></span>
+    </div>
+    <ul class="nav-links">
+      <li class="active"><a href="/"><span>📊</span> Dashboard</a></li>
+      <li><a href="/predict"><span>🎯</span> Predict Crime</a></li>
+      <li><a href="/upload"><span>📁</span> Upload Data</a></li>
+      <li><a href="/records"><span>🗄️</span> Records</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div id="status-badge" class="status-badge">
+        <span class="dot"></span> Checking...
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1>Crime Analytics Dashboard</h1>
+        <p class="subtitle">Mysuru District, Karnataka — Real-time Crime Intelligence</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn" style="background:rgba(239,68,68,0.15);border:1px solid var(--danger);color:var(--danger)" onclick="clearData()">🗑️ Clear All Data</button>
+        <button class="btn" style="background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#ef4444" onclick="openAlertModal()">🔔 Send Alert</button>
+        <button class="btn btn-primary" onclick="trainModel()">
+          <span id="train-spinner" style="display:none">⏳</span> 🚀 Train / Retrain Model
+        </button>
+      </div>
+    </header>
+
+    <!-- Auto-train banner -->
+    {% if not models_ready %}
+    <div class="alert alert-info" id="trainingBanner">
+      <span class="pulse-dot"></span>
+      <strong>No trained model yet.</strong> Please <a href="/upload">upload a CSV file</a> with real crime data to get started. The model will train automatically after upload.
+    </div>
+    {% endif %}
+    <section class="kpi-grid">
+      <div class="kpi-card blue">
+        <div class="kpi-icon">📋</div>
+        <div class="kpi-info">
+          <span class="kpi-value" id="kpi-total">—</span>
+          <span class="kpi-label">Total Records</span>
+        </div>
+      </div>
+      <div class="kpi-card red">
+        <div class="kpi-icon">📍</div>
+        <div class="kpi-info">
+          <span class="kpi-value" id="kpi-top-area">—</span>
+          <span class="kpi-label">Highest Crime Area</span>
+        </div>
+      </div>
+      <div class="kpi-card orange">
+        <div class="kpi-icon">⚠️</div>
+        <div class="kpi-info">
+          <span class="kpi-value" id="kpi-top-crime">—</span>
+          <span class="kpi-label">Most Common Crime</span>
+        </div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-icon">🤖</div>
+        <div class="kpi-info">
+          <span class="kpi-value" id="kpi-model-status">—</span>
+          <span class="kpi-label">Model Status</span>
+        </div>
+      </div>
+      <div class="kpi-card purple">
+        <div class="kpi-icon">🗄️</div>
+        <div class="kpi-info">
+          <span class="kpi-value" id="live-db-count">—</span>
+          <span class="kpi-label">DB Records (Live)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Charts Row 1 -->
+    <section class="charts-grid">
+      <div class="chart-card wide">
+        <h3>Crime Distribution by Area</h3>
+        <canvas id="areaChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>Crime Type Breakdown</h3>
+        <canvas id="crimeTypeChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Charts Row 2 -->
+    <section class="charts-grid">
+      <div class="chart-card">
+        <h3>Risk Level Distribution</h3>
+        <canvas id="riskChart"></canvas>
+      </div>
+      <div class="chart-card wide">
+        <h3>Hourly Crime Trend</h3>
+        <canvas id="hourlyChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Charts Row 3 -->
+    <section class="charts-grid">
+      <div class="chart-card">
+        <h3>📅 Monthly Crime Trend</h3>
+        <canvas id="monthlyChart"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>🏖️ Weekend vs Weekday</h3>
+        <canvas id="weekendChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Model Comparison -->
+    <section class="charts-grid" style="grid-template-columns:1fr">
+      <div class="chart-card full">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h3>🤖 Model Accuracy Comparison</h3>
+          <a href="/api/export" class="btn btn-primary" style="padding:8px 16px;font-size:13px">⬇️ Export CSV</a>
+        </div>
+        <div id="modelCompare" class="model-compare-grid"><p style="color:var(--text-muted)">Train the model to see accuracy comparison.</p></div>
+      </div>
+    </section>
+
+    <!-- Map -->
+    <section class="map-section">
+      <div class="chart-card full">
+        <h3>🗺️ Crime Hotspot Map — Mysuru District</h3>
+        <div id="map"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Alert Modal -->
+  <div id="alertModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#1a1d2e;border:1px solid #ef4444;border-radius:16px;padding:28px;width:100%;max-width:480px;margin:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <h3 style="margin:0;color:#ef4444">🔔 Send Push Alert to All Users</h3>
+        <button onclick="closeAlertModal()" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer">&times;</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div>
+          <label style="font-size:13px;color:#aaa;display:block;margin-bottom:6px">Area</label>
+          <select id="alert-area" style="width:100%;padding:10px 12px;background:#0f1117;border:1px solid #2e3250;border-radius:8px;color:#fff;font-size:14px">
+            <option value="All Areas">📍 All Areas (Broadcast)</option>
+            <option>Mysuru City</option><option>Bannur</option><option>Nanjangud</option>
+            <option>Hunsur</option><option>T Narasipura</option><option>KRS</option>
+            <option>Periyapatna</option><option>HD Kote</option><option>Saragur</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:13px;color:#aaa;display:block;margin-bottom:6px">Severity</label>
+          <select id="alert-severity" style="width:100%;padding:10px 12px;background:#0f1117;border:1px solid #2e3250;border-radius:8px;color:#fff;font-size:14px">
+            <option value="High">🔴 High</option>
+            <option value="Medium">🟡 Medium</option>
+            <option value="Low">🟢 Low</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:13px;color:#aaa;display:block;margin-bottom:6px">Message</label>
+          <textarea id="alert-message" rows="3" placeholder="e.g. Robbery reported near City Market. Stay alert!" style="width:100%;padding:10px 12px;background:#0f1117;border:1px solid #2e3250;border-radius:8px;color:#fff;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+        <button id="alert-send-btn" onclick="sendAlert()" style="background:#ef4444;color:#fff;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;width:100%">
+          🚨 Send to All App Users
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const analytics = {{ analytics | tojson }};
+
+    function clearData() {
+      if (!confirm('Delete ALL records and reset models?')) return;
+      fetch('/api/clear', { method: 'POST' }).then(r => r.json()).then(d => {
+        showToast('🗑️ All data cleared. Upload a new CSV to start fresh.', 'info');
+        setTimeout(() => location.reload(), 1500);
+      });
+    }
+
+    // Train model
+    function trainModel() {
+      const spinner = document.getElementById('train-spinner');
+      spinner.style.display = 'inline';
+      showToast('Training started… this may take a minute.', 'info');
+      fetch('/train', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+          spinner.style.display = 'none';
+          if (d.status === 'success') {
+            showToast('✅ Model trained successfully!', 'success');
+            setTimeout(() => location.reload(), 1500);
+          } else {
+            showToast('❌ ' + d.message, 'error');
+          }
+        }).catch(() => { spinner.style.display = 'none'; showToast('Training failed.', 'error'); });
+    }
+
+    function showToast(msg, type = 'info') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast show ${type}`;
+      setTimeout(() => t.className = 'toast', 3500);
+    }
+
+    function openAlertModal() {
+      const m = document.getElementById('alertModal');
+      m.style.display = 'flex';
+    }
+    function closeAlertModal() {
+      document.getElementById('alertModal').style.display = 'none';
+      document.getElementById('alert-message').value = '';
+    }
+    document.getElementById('alertModal').addEventListener('click', function(e) {
+      if (e.target === this) closeAlertModal();
+    });
+
+    function sendAlert() {
+      const area     = document.getElementById('alert-area').value;
+      const severity = document.getElementById('alert-severity').value;
+      const message  = document.getElementById('alert-message').value.trim();
+      if (!message) { showToast('Please enter an alert message.', 'error'); return; }
+      const btn = document.getElementById('alert-send-btn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Sending...';
+      fetch('/api/alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ area, severity, message })
+      })
+      .then(r => r.json())
+      .then(d => {
+        btn.disabled = false;
+        btn.textContent = '🚨 Send to All App Users';
+        closeAlertModal();
+        showToast(`✅ Alert sent to all users in ${area}!`, 'success');
+      })
+      .catch(() => {
+        btn.disabled = false;
+        btn.textContent = '🚨 Send to All App Users';
+        showToast('❌ Failed to send alert.', 'error');
+      });
+    }
+
+    // Live DB count + auto-reload when training finishes
+    const modelsWereReady = {{ 'true' if models_ready else 'false' }};
+    function pollStatus() {
+      fetch('/api/status').then(r=>r.json()).then(d=>{
+        const badge = document.getElementById('status-badge');
+        badge.innerHTML = d.models_ready
+          ? '<span class="dot green"></span> Models Ready'
+          : '<span class="dot orange"></span> Training…';
+        document.getElementById('live-db-count').textContent = d.record_count.toLocaleString();
+        document.getElementById('kpi-total').textContent = d.record_count.toLocaleString();
+        document.getElementById('kpi-model-status').textContent = d.models_ready ? 'Ready' : 'Not Trained';
+        if (!modelsWereReady && d.models_ready) {
+          showToast('✅ Training complete! Reloading…', 'success');
+          setTimeout(() => location.reload(), 1500);
+        } else if (!d.models_ready) {
+          setTimeout(pollStatus, 4000);
+        }
+      }).catch(() => setTimeout(pollStatus, 6000));
+    }
+    pollStatus();
+
+    // Load analytics live
+    fetch('/api/analytics').then(r=>r.json()).then(data=>{
+      document.getElementById('kpi-top-area').textContent  = data.top_area  || 'N/A';
+      document.getElementById('kpi-top-crime').textContent = data.top_crime || 'N/A';
+    });
+
+    // Model comparison
+    fetch('/api/compare').then(r=>r.json()).then(data=>{
+      const el = document.getElementById('modelCompare');
+      if (!Object.keys(data).length) return;
+      const models = ['random_forest','decision_tree','logistic_regression'];
+      const labels = {'random_forest':'Random Forest','decision_tree':'Decision Tree','logistic_regression':'Logistic Regression'};
+      el.innerHTML = models.map(m => {
+        const ca = data[m+'_crime'] || 0, ra = data[m+'_risk'] || 0;
+        return `<div class="model-card">
+          <div class="model-name">${labels[m]}</div>
+          <div class="model-stat"><span>Crime Type</span><div class="mini-bar-wrap"><div class="mini-bar" style="width:${ca}%"></div></div><b>${ca}%</b></div>
+          <div class="model-stat"><span>Risk Level</span><div class="mini-bar-wrap"><div class="mini-bar risk" style="width:${ra}%"></div></div><b>${ra}%</b></div>
+        </div>`;
+      }).join('');
+    });
+
+    // Charts
+    const COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+
+    if (analytics.crime_by_area) {
+      const labels = Object.keys(analytics.crime_by_area);
+      const values = Object.values(analytics.crime_by_area);
+      new Chart(document.getElementById('areaChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Crimes', data: values, backgroundColor: COLORS, borderRadius: 6 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    if (analytics.crime_by_type) {
+      const labels = Object.keys(analytics.crime_by_type);
+      const values = Object.values(analytics.crime_by_type);
+      new Chart(document.getElementById('crimeTypeChart'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: COLORS }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      });
+    }
+
+    if (analytics.risk_distribution) {
+      const riskColors = { High: '#ef4444', Medium: '#f59e0b', Low: '#10b981' };
+      const labels = Object.keys(analytics.risk_distribution);
+      new Chart(document.getElementById('riskChart'), {
+        type: 'pie',
+        data: { labels, datasets: [{ data: Object.values(analytics.risk_distribution), backgroundColor: labels.map(l => riskColors[l] || '#6366f1') }] },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      });
+    }
+
+    if (analytics.hourly_trend) {
+      const hours = Array.from({length: 24}, (_, i) => `${i}:00`);
+      const counts = hours.map((_, i) => analytics.hourly_trend[String(i)] || 0);
+      new Chart(document.getElementById('hourlyChart'), {
+        type: 'line',
+        data: { labels: hours, datasets: [{ label: 'Crimes', data: counts, borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    const MONTHS_ORDER = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    if (analytics.monthly_trend) {
+      const labels = MONTHS_ORDER.filter(m => analytics.monthly_trend[m] !== undefined);
+      const values = labels.map(m => analytics.monthly_trend[m]);
+      new Chart(document.getElementById('monthlyChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Crimes', data: values, backgroundColor: '#6366f1', borderRadius: 4 }] },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    if (analytics.weekend_vs_weekday) {
+      new Chart(document.getElementById('weekendChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Weekend', 'Weekday'],
+          datasets: [{ data: [analytics.weekend_vs_weekday.Weekend, analytics.weekend_vs_weekday.Weekday], backgroundColor: ['#6366f1','#22263a'], borderColor: ['#6366f1','#2e3250'], borderWidth: 2 }]
+        },
+        options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+      });
+    }
+
+    // Leaflet Map
+    const map = L.map('map').setView([12.2958, 76.6394], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const hotspots = {{ analytics.get('hotspots', []) | tojson }};
+    hotspots.forEach(h => {
+      const radius = Math.min(Math.max(h.count / 10, 8), 40);
+      const color = h.count > 1500 ? '#ef4444' : h.count > 800 ? '#f59e0b' : '#10b981';
+      L.circleMarker([h.lat, h.lon], { radius, color, fillColor: color, fillOpacity: 0.6, weight: 2 })
+        .addTo(map)
+        .bindPopup(`<b>${h.Area}</b><br>Crimes: ${h.count}`);
+    });
+
+    const areaCoords = {
+      "Mysuru City": [12.2958, 76.6394], "Bannur": [12.0833, 76.8167],
+      "Nanjangud": [12.1167, 76.6833], "Hunsur": [12.3000, 76.2833],
+      "T Narasipura": [12.2167, 76.9167], "KRS": [12.4167, 76.5667],
+      "Periyapatna": [12.3333, 76.1000], "HD Kote": [12.0500, 76.2667],
+      "Saragur": [11.9833, 76.3833]
+    };
+    Object.entries(areaCoords).forEach(([name, coords]) => {
+      L.marker(coords).addTo(map).bindTooltip(name, { permanent: true, direction: 'top', className: 'map-label' });
+    });
+  </script>
+</body>
+</html>

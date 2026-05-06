@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Predict Crime – Mysuru District</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">🔍</span>
+      <span class="brand-text">CrimeWatch<br><small>Mysuru District</small></span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="/"><span>📊</span> Dashboard</a></li>
+      <li class="active"><a href="/predict"><span>🎯</span> Predict Crime</a></li>
+      <li><a href="/upload"><span>📁</span> Upload Data</a></li>
+      <li><a href="/records"><span>🗄️</span> Records</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1>Crime Prediction</h1>
+        <p class="subtitle">Enter location and time details to predict crime type and risk level</p>
+      </div>
+    </header>
+
+    {% if not models_ready %}
+    <div class="alert alert-warning">
+      ⚠️ Models are not trained yet. Please go to the <a href="/">Dashboard</a> and click <strong>Train / Retrain Model</strong>.
+    </div>
+    {% endif %}
+
+    <div class="predict-layout">
+      <!-- Form -->
+      <div class="chart-card predict-form-card">
+        <h3>🔎 Input Parameters</h3>
+        <form id="predictForm">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>📍 Area</label>
+              <select name="area" id="area" required>
+                {% for a in areas %}
+                <option value="{{ a }}">{{ a }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>🕐 Hour (0–23)</label>
+              <input type="number" name="hour" id="hour" min="0" max="23" value="14" required/>
+              <span class="hint" id="hour-hint">2:00 PM – Afternoon</span>
+            </div>
+
+            <div class="form-group">
+              <label>📅 Day</label>
+              <select name="day" id="day" required>
+                {% for d in days %}
+                <option value="{{ d }}">{{ d }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>🗓️ Month</label>
+              <select name="month" id="month" required>
+                {% for m in months %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>🌤️ Weather</label>
+              <select name="weather" id="weather" required>
+                {% for w in weathers %}
+                <option value="{{ w }}">{{ w }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>👥 Population Density</label>
+              <input type="number" name="population_density" id="population_density" min="1000" max="15000" value="5000" required/>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="is_weekend" id="is_weekend" value="1"/>
+                <span class="checkmark"></span> Weekend
+              </label>
+            </div>
+
+            <div class="form-group checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" name="is_festival" id="is_festival" value="1"/>
+                <span class="checkmark"></span> Festival Day
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full" {% if not models_ready %}disabled{% endif %}>
+            <span id="predict-spinner" style="display:none">⏳</span> 🎯 Predict Now
+          </button>
+        </form>
+      </div>
+
+      <!-- Result Panel -->
+      <div class="predict-result-panel" id="resultPanel" style="display:none">
+        <div class="chart-card result-card">
+          <h3>📊 Prediction Result</h3>
+          <div class="result-area-badge" id="resultArea"></div>
+
+          <div class="result-item">
+            <span class="result-label">🚨 Crime Type</span>
+            <span class="result-value" id="resultCrimeType">—</span>
+          </div>
+          <div class="result-confidence">
+            <div class="conf-bar-wrap">
+              <div class="conf-bar" id="crimeConfBar"></div>
+            </div>
+            <span id="crimeConfText"></span>
+          </div>
+
+          <div class="result-item mt-2">
+            <span class="result-label">⚠️ Risk Level</span>
+            <span class="result-badge" id="resultRiskLevel">—</span>
+          </div>
+          <div class="result-confidence">
+            <div class="conf-bar-wrap">
+              <div class="conf-bar risk" id="riskConfBar"></div>
+            </div>
+            <span id="riskConfText"></span>
+          </div>
+
+          <div class="result-meta" id="resultMeta"></div>
+        </div>
+
+        <div class="chart-card advice-card" id="adviceCard">
+          <h3>💡 Safety Advisory</h3>
+          <p id="adviceText"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Hour hint
+    const hourInput = document.getElementById('hour');
+    const hourHint  = document.getElementById('hour-hint');
+    function updateHourHint(h) {
+      const periods = ['Midnight','Early Morning','Early Morning','Early Morning','Early Morning','Dawn',
+        'Morning','Morning','Morning','Morning','Late Morning','Late Morning',
+        'Noon','Afternoon','Afternoon','Afternoon','Late Afternoon','Evening',
+        'Evening','Evening','Night','Night','Night','Night'];
+      const ampm = h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h-12}:00 PM`;
+      hourHint.textContent = `${ampm} – ${periods[h]}`;
+    }
+    hourInput.addEventListener('input', () => updateHourHint(parseInt(hourInput.value) || 0));
+    updateHourHint(14);
+
+    // Auto-set weekend checkbox
+    document.getElementById('day').addEventListener('change', function() {
+      document.getElementById('is_weekend').checked = ['Saturday','Sunday'].includes(this.value);
+    });
+
+    // Form submit
+    document.getElementById('predictForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const spinner = document.getElementById('predict-spinner');
+      spinner.style.display = 'inline';
+
+      const payload = {
+        area:               document.getElementById('area').value,
+        hour:               parseInt(document.getElementById('hour').value),
+        day:                document.getElementById('day').value,
+        month:              document.getElementById('month').value,
+        weather:            document.getElementById('weather').value,
+        population_density: parseInt(document.getElementById('population_density').value),
+        is_weekend:         document.getElementById('is_weekend').checked ? 1 : 0,
+        is_festival:        document.getElementById('is_festival').checked ? 1 : 0,
+      };
+
+      try {
+        const res  = await fetch('/api/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        spinner.style.display = 'none';
+
+        if (data.error) { alert('Error: ' + data.error); return; }
+
+        showResult(data, payload);
+      } catch(err) {
+        spinner.style.display = 'none';
+        alert('Request failed: ' + err.message);
+      }
+    });
+
+    function showResult(data, payload) {
+      document.getElementById('resultPanel').style.display = 'flex';
+      document.getElementById('resultArea').textContent = `📍 ${payload.area}`;
+
+      document.getElementById('resultCrimeType').textContent = data.crime_type;
+      document.getElementById('crimeConfBar').style.width = data.crime_confidence + '%';
+      document.getElementById('crimeConfText').textContent = `Confidence: ${data.crime_confidence}%`;
+
+      const riskEl = document.getElementById('resultRiskLevel');
+      riskEl.textContent = data.risk_level;
+      riskEl.className = 'result-badge risk-' + data.risk_level.toLowerCase();
+      document.getElementById('riskConfBar').style.width = data.risk_confidence + '%';
+      document.getElementById('riskConfText').textContent = `Confidence: ${data.risk_confidence}%`;
+
+      const h = payload.hour;
+      document.getElementById('resultMeta').innerHTML =
+        `<small>📅 ${payload.day}, ${payload.month} | 🕐 ${h}:00 | 🌤️ ${payload.weather} | 
+         ${payload.is_weekend ? '🏖️ Weekend' : '💼 Weekday'} 
+         ${payload.is_festival ? '🎉 Festival' : ''}</small>`;
+
+      const advice = {
+        High:   '🚨 High risk detected. Avoid isolated areas, stay in well-lit public spaces, and report suspicious activity to local police (100).',
+        Medium: '⚠️ Moderate risk. Stay alert, keep valuables secure, and avoid travelling alone late at night.',
+        Low:    '✅ Low risk area. Normal precautions apply. Stay aware of your surroundings.'
+      };
+      document.getElementById('adviceText').textContent = advice[data.risk_level] || '';
+      document.getElementById('resultPanel').scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

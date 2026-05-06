@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crime Records – Mysuru District</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">🔍</span>
+      <span class="brand-text">CrimeWatch<br><small>Mysuru District</small></span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="/"><span>📊</span> Dashboard</a></li>
+      <li><a href="/predict"><span>🎯</span> Predict Crime</a></li>
+      <li><a href="/upload"><span>📁</span> Upload Data</a></li>
+      <li class="active"><a href="/records"><span>🗄️</span> Records</a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <div id="status-badge" class="status-badge"><span class="dot"></span> Checking...</div>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1>Crime Records</h1>
+        <p class="subtitle">Browse, search and manage all Mysuru crime records from MongoDB</p>
+      </div>
+      <div class="header-actions">
+        <a href="/api/export" class="btn btn-primary">⬇️ Export All CSV</a>
+      </div>
+    </header>
+
+    <!-- Search + Stats bar -->
+    <div class="records-toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔎</span>
+        <input type="text" id="searchInput" placeholder="Search by Crime ID, Area, Crime Type, Risk Level…" value="{{ search }}"/>
+        <button class="btn btn-primary" onclick="doSearch()" style="padding:8px 16px">Search</button>
+        {% if search %}<a href="/records" class="btn" style="padding:8px 14px;background:var(--bg3);color:var(--text-muted)">✕ Clear</a>{% endif %}
+      </div>
+      <div class="records-count" id="recordsCount">Loading…</div>
+    </div>
+
+    <!-- Table -->
+    <div class="chart-card" style="padding:0;overflow:hidden">
+      <div class="table-wrap">
+        <table class="records-table" id="recordsTable">
+          <thead>
+            <tr>
+              <th>Crime ID</th>
+              <th>Date</th>
+              <th>Area</th>
+              <th>Hour</th>
+              <th>Day</th>
+              <th>Crime Type</th>
+              <th>Risk Level</th>
+              <th>Weather</th>
+              <th>Population</th>
+              <th>Weekend</th>
+              <th>Festival</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="recordsBody">
+            <tr><td colspan="12" class="table-loading">⏳ Loading records…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </main>
+
+  <!-- Delete Confirm Modal -->
+  <div class="modal-overlay" id="modalOverlay" style="display:none">
+    <div class="modal">
+      <h3>🗑️ Delete Record</h3>
+      <p>Are you sure you want to delete <strong id="deleteId"></strong>? This cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn" style="background:var(--bg3);color:var(--text-muted)" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let currentPage = {{ page }};
+    let currentSearch = "{{ search }}";
+    const perPage = {{ per_page }};
+
+    fetch('/api/status').then(r=>r.json()).then(d=>{
+      const b = document.getElementById('status-badge');
+      b.innerHTML = d.models_ready ? '<span class="dot green"></span> Models Ready' : '<span class="dot red"></span> Not Trained';
+    });
+
+    function loadRecords(page, search) {
+      currentPage = page;
+      currentSearch = search;
+      const url = `/api/records?page=${page}&per_page=${perPage}&search=${encodeURIComponent(search)}`;
+      fetch(url).then(r=>r.json()).then(data=>{
+        if (data.error) { showToast('Error: ' + data.error, 'error'); return; }
+        renderTable(data.records);
+        renderPagination(data.total, data.page, perPage);
+        document.getElementById('recordsCount').textContent =
+          `Showing ${((page-1)*perPage)+1}–${Math.min(page*perPage, data.total)} of ${data.total.toLocaleString()} records`;
+      });
+    }
+
+    function renderTable(records) {
+      const tbody = document.getElementById('recordsBody');
+      if (!records.length) {
+        tbody.innerHTML = '<tr><td colspan="12" class="table-loading">No records found.</td></tr>';
+        return;
+      }
+      const riskClass = { High: 'risk-high', Medium: 'risk-medium', Low: 'risk-low' };
+      tbody.innerHTML = records.map(r => `
+        <tr>
+          <td class="mono">${r.Crime_ID || '—'}</td>
+          <td>${r.Date || '—'}</td>
+          <td><span class="area-tag">${r.Area || '—'}</span></td>
+          <td>${r.Hour ?? '—'}:00</td>
+          <td>${r.Day || '—'}</td>
+          <td>${r.Crime_Type || '—'}</td>
+          <td><span class="result-badge ${riskClass[r.Risk_Level] || ''}">${r.Risk_Level || '—'}</span></td>
+          <td>${r.Weather || '—'}</td>
+          <td>${(r.Population_Density || 0).toLocaleString()}</td>
+          <td>${r.Is_Weekend ? '✅' : '—'}</td>
+          <td>${r.Is_Festival ? '🎉' : '—'}</td>
+          <td><button class="btn-delete" onclick="confirmDelete('${r.Crime_ID}')">🗑️</button></td>
+        </tr>`).join('');
+    }
+
+    function renderPagination(total, page, perPage) {
+      const totalPages = Math.ceil(total / perPage);
+      const el = document.getElementById('pagination');
+      if (totalPages <= 1) { el.innerHTML = ''; return; }
+      let html = '';
+      const start = Math.max(1, page - 2);
+      const end   = Math.min(totalPages, page + 2);
+      if (page > 1) html += `<button onclick="loadRecords(${page-1},'${currentSearch}')">‹ Prev</button>`;
+      if (start > 1) html += `<button onclick="loadRecords(1,'${currentSearch}')">1</button><span>…</span>`;
+      for (let i = start; i <= end; i++)
+        html += `<button class="${i===page?'active':''}" onclick="loadRecords(${i},'${currentSearch}')">${i}</button>`;
+      if (end < totalPages) html += `<span>…</span><button onclick="loadRecords(${totalPages},'${currentSearch}')">${totalPages}</button>`;
+      if (page < totalPages) html += `<button onclick="loadRecords(${page+1},'${currentSearch}')">Next ›</button>`;
+      el.innerHTML = html;
+    }
+
+    function doSearch() {
+      const q = document.getElementById('searchInput').value.trim();
+      loadRecords(1, q);
+      history.pushState({}, '', `/records?search=${encodeURIComponent(q)}`);
+    }
+
+    document.getElementById('searchInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSearch();
+    });
+
+    let pendingDeleteId = null;
+    function confirmDelete(id) {
+      pendingDeleteId = id;
+      document.getElementById('deleteId').textContent = id;
+      document.getElementById('modalOverlay').style.display = 'flex';
+    }
+    function closeModal() {
+      document.getElementById('modalOverlay').style.display = 'none';
+      pendingDeleteId = null;
+    }
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+      if (!pendingDeleteId) return;
+      const res  = await fetch(`/api/records/delete/${pendingDeleteId}`, { method: 'DELETE' });
+      const data = await res.json();
+      closeModal();
+      if (data.status === 'deleted') {
+        showToast(`✅ Record ${pendingDeleteId} deleted.`, 'success');
+        loadRecords(currentPage, currentSearch);
+      } else {
+        showToast('❌ ' + (data.error || 'Delete failed'), 'error');
+      }
+    });
+
+    function showToast(msg, type='info') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = `toast show ${type}`;
+      setTimeout(() => t.className = 'toast', 3500);
+    }
+
+    // Initial load
+    loadRecords(currentPage, currentSearch);
+  </script>
+</body>
+</html>

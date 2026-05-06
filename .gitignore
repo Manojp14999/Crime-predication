@@ -1,0 +1,10 @@
+firebase_service_account.json
+*.pkl
+*.log
+__pycache__/
+venv/
+.env
+data/
+models/
+test_upload.csv
+*.pyc

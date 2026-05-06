@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Upload Data – Mysuru District</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <span class="brand-icon">🔍</span>
+      <span class="brand-text">CrimeWatch<br><small>Mysuru District</small></span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="/"><span>📊</span> Dashboard</a></li>
+      <li><a href="/predict"><span>🎯</span> Predict Crime</a></li>
+      <li class="active"><a href="/upload"><span>📁</span> Upload Data</a></li>
+      <li><a href="/records"><span>🗄️</span> Records</a></li>
+    </ul>
+  </nav>
+
+  <main class="main-content">
+    <header class="page-header">
+      <div>
+        <h1>Upload Crime Data</h1>
+        <p class="subtitle">Upload a CSV file to add new Mysuru crime records to the database</p>
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- Manual Entry Form -->
+    <div class="chart-card" style="margin-bottom:24px">
+      <h3>✏️ Add Single Record Manually</h3>
+      <div id="manualAlert"></div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="form-group">
+          <label>Crime ID <small style="color:var(--text-muted)">(optional — auto-generated)</small></label>
+          <input type="text" id="m_crime_id" class="form-control" placeholder="e.g. MYS-ABC123"/>
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" id="m_date" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label>Time</label>
+          <input type="time" id="m_time" class="form-control" required/>
+        </div>
+        <div class="form-group">
+          <label>Area</label>
+          <select id="m_area" class="form-control">
+            <option>Mysuru City</option><option>Bannur</option><option>Nanjangud</option>
+            <option>Hunsur</option><option>T Narasipura</option><option>KRS</option>
+            <option>Periyapatna</option><option>HD Kote</option><option>Saragur</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Crime Type</label>
+          <select id="m_crime_type" class="form-control">
+            <option>Theft</option><option>Assault</option><option>Robbery</option>
+            <option>Vandalism</option><option>Fraud</option><option>Burglary</option>
+            <option>Drug Offense</option><option>Traffic Violation</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Risk Level</label>
+          <select id="m_risk_level" class="form-control">
+            <option>High</option><option>Medium</option><option>Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Weather</label>
+          <select id="m_weather" class="form-control">
+            <option>Clear</option><option>Cloudy</option><option>Rainy</option>
+            <option>Foggy</option><option>Stormy</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Population Density</label>
+          <input type="number" id="m_density" class="form-control" value="5000" min="100"/>
+        </div>
+        <div class="form-group">
+          <label>Latitude</label>
+          <input type="number" id="m_lat" class="form-control" value="12.2958" step="0.0001"/>
+        </div>
+        <div class="form-group">
+          <label>Longitude</label>
+          <input type="number" id="m_lon" class="form-control" value="76.6394" step="0.0001"/>
+        </div>
+        <div class="form-group">
+          <label>Festival Day?</label>
+          <select id="m_festival" class="form-control">
+            <option value="0">No</option><option value="1">Yes</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-2" onclick="submitManual()" id="manualBtn">➕ Add Record to Database</button>
+    </div>
+
+    <div class="upload-layout">
+      <div class="chart-card upload-card">
+        <h3>📤 Upload CSV File</h3>
+        <form method="POST" enctype="multipart/form-data" id="uploadForm">
+          <div class="drop-zone" id="dropZone">
+            <div class="drop-icon">📂</div>
+            <p>Drag & drop your CSV file here</p>
+            <p class="hint">or click to browse</p>
+            <input type="file" name="file" id="fileInput" accept=".csv" required/>
+          </div>
+          <div id="fileInfo" class="file-info" style="display:none"></div>
+          <button type="submit" class="btn btn-primary btn-full mt-2">
+            ⬆️ Upload & Insert to MongoDB
+          </button>
+        </form>
+      </div>
+
+      <div class="chart-card schema-card">
+        <h3>📋 Required CSV Schema</h3>
+        <p class="hint mb-1">Your CSV must contain these columns:</p>
+        <table class="schema-table">
+          <thead><tr><th>Column</th><th>Type</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td>Crime_ID</td><td>String</td><td>MYS000001</td></tr>
+            <tr><td>Date</td><td>YYYY-MM-DD</td><td>2024-01-15</td></tr>
+            <tr><td>Time</td><td>HH:MM</td><td>22:30</td></tr>
+            <tr><td>Day</td><td>String</td><td>Monday</td></tr>
+            <tr><td>Month</td><td>String</td><td>January</td></tr>
+            <tr><td>Year</td><td>Integer</td><td>2024</td></tr>
+            <tr><td>Area</td><td>String</td><td>Mysuru City</td></tr>
+            <tr><td>Latitude</td><td>Float</td><td>12.2958</td></tr>
+            <tr><td>Longitude</td><td>Float</td><td>76.6394</td></tr>
+            <tr><td>Crime_Type</td><td>String</td><td>Theft</td></tr>
+            <tr><td>Risk_Level</td><td>String</td><td>High</td></tr>
+            <tr><td>Population_Density</td><td>Integer</td><td>9500</td></tr>
+            <tr><td>Weather</td><td>String</td><td>Clear</td></tr>
+            <tr><td>Is_Weekend</td><td>0 or 1</td><td>1</td></tr>
+            <tr><td>Is_Festival</td><td>0 or 1</td><td>0</td></tr>
+            <tr><td>Hour</td><td>0–23</td><td>22</td></tr>
+          </tbody>
+        </table>
+        <div class="info-box mt-2">
+          <strong>ℹ️ Note:</strong> Duplicate <code>Crime_ID</code> records will be automatically skipped.
+          After upload, the model will be automatically retrained.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function submitManual() {
+      const btn = document.getElementById('manualBtn');
+      const alertEl = document.getElementById('manualAlert');
+      const date = document.getElementById('m_date').value;
+      const time = document.getElementById('m_time').value;
+      if (!date || !time) {
+        alertEl.innerHTML = '<div class="alert alert-danger">Date and Time are required.</div>';
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      fetch('/api/add_record', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          crime_id:           document.getElementById('m_crime_id').value.trim(),
+          date,
+          time,
+          area:               document.getElementById('m_area').value,
+          crime_type:         document.getElementById('m_crime_type').value,
+          risk_level:         document.getElementById('m_risk_level').value,
+          weather:            document.getElementById('m_weather').value,
+          population_density: document.getElementById('m_density').value,
+          latitude:           document.getElementById('m_lat').value,
+          longitude:          document.getElementById('m_lon').value,
+          is_festival:        document.getElementById('m_festival').value,
+        })
+      }).then(r => r.json()).then(d => {
+        btn.disabled = false;
+        btn.textContent = '➕ Add Record to Database';
+        if (d.status === 'success') {
+          alertEl.innerHTML = `<div class="alert alert-success">✅ Record <strong>${d.crime_id}</strong> added successfully! Model retraining in background.</div>`;
+          document.getElementById('m_crime_id').value = '';
+          document.getElementById('m_date').value = '';
+          document.getElementById('m_time').value = '';
+        } else {
+          alertEl.innerHTML = `<div class="alert alert-danger">❌ ${d.message}</div>`;
+        }
+      }).catch(() => {
+        btn.disabled = false;
+        btn.textContent = '➕ Add Record to Database';
+        alertEl.innerHTML = '<div class="alert alert-danger">❌ Network error. Try again.</div>';
+      });
+    }
+
+    const dropZone  = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo  = document.getElementById('fileInfo');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) { fileInput.files = e.dataTransfer.files; showFileInfo(file); }
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) showFileInfo(fileInput.files[0]);
+    });
+
+    function showFileInfo(file) {
+      fileInfo.style.display = 'block';
+      fileInfo.innerHTML = `📄 <strong>${file.name}</strong> — ${(file.size / 1024).toFixed(1)} KB`;
+      dropZone.classList.add('file-selected');
+    }
+  </script>
+</body>
+</html>
