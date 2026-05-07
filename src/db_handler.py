@@ -1,3 +1,5 @@
+import ssl
+import certifi
 import pandas as pd
 from pymongo import MongoClient, errors
 import logging
@@ -8,8 +10,24 @@ DB_NAME  = "mysuru_crime_db"
 COL_NAME = "crimes"
 
 def get_collection(uri="mongodb://localhost:27017/"):
-    client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-    return client[DB_NAME][COL_NAME]
+    try:
+        # Try with certifi certificates first (works on most systems)
+        client = MongoClient(
+            uri,
+            serverSelectionTimeoutMS=10000,
+            tlsCAFile=certifi.where()
+        )
+        client.admin.command('ping')
+        return client[DB_NAME][COL_NAME]
+    except Exception:
+        # Fallback: disable SSL verification (for systems with missing CA certs)
+        client = MongoClient(
+            uri,
+            serverSelectionTimeoutMS=10000,
+            tls=True,
+            tlsAllowInvalidCertificates=True
+        )
+        return client[DB_NAME][COL_NAME]
 
 def insert_dataframe(df: pd.DataFrame, uri="mongodb://localhost:27017/"):
     col = get_collection(uri)
