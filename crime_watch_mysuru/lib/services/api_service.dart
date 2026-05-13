@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -6,27 +7,41 @@ import 'package:http/http.dart' as http;
 // For real device use your PC's local IP e.g: http://192.168.1.x:5000
 const String baseUrl = 'http://10.0.2.2:5000';
 
-const _timeout = Duration(seconds: 30);
+const _timeout = Duration(seconds: 60);
 
 class ApiService {
   static Future<http.Response> _get(String path) async {
-    try {
-      return await http.get(Uri.parse('$baseUrl$path')).timeout(_timeout);
-    } on SocketException catch (e) {
-      throw Exception('Cannot reach server: ${e.message}');
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await http.get(Uri.parse('$baseUrl$path')).timeout(_timeout);
+      } on SocketException {
+        if (attempt == 3) throw Exception('Cannot reach server. Make sure Flask is running.');
+        await Future.delayed(const Duration(seconds: 2));
+      } on TimeoutException {
+        if (attempt == 3) throw Exception('Server took too long to respond.');
+        await Future.delayed(const Duration(seconds: 2));
+      }
     }
+    throw Exception('Request failed.');
   }
 
   static Future<http.Response> _post(String path, [Map<String, dynamic>? body]) async {
-    try {
-      return await http.post(
-        Uri.parse('$baseUrl$path'),
-        headers: {'Content-Type': 'application/json'},
-        body: body != null ? jsonEncode(body) : null,
-      ).timeout(_timeout);
-    } on SocketException catch (e) {
-      throw Exception('Cannot reach server: ${e.message}');
+    for (int attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await http.post(
+          Uri.parse('$baseUrl$path'),
+          headers: {'Content-Type': 'application/json'},
+          body: body != null ? jsonEncode(body) : null,
+        ).timeout(_timeout);
+      } on SocketException {
+        if (attempt == 3) throw Exception('Cannot reach server. Make sure Flask is running.');
+        await Future.delayed(const Duration(seconds: 2));
+      } on TimeoutException {
+        if (attempt == 3) throw Exception('Server took too long to respond.');
+        await Future.delayed(const Duration(seconds: 2));
+      }
     }
+    throw Exception('Request failed.');
   }
 
   static Future<void> trainModel() async {
