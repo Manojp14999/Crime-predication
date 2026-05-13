@@ -34,7 +34,8 @@ class _PredictScreenState extends State<PredictScreen> {
       );
       setState(() { _result = result; _loading = false; });
     } catch (e) {
-      setState(() { _error = e.toString(); _loading = false; });
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      setState(() { _error = msg; _loading = false; });
     }
   }
 
