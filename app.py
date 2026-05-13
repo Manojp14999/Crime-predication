@@ -28,6 +28,7 @@ app.secret_key = "mysuru_crime_secret_2024"
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb+srv://manojp14999_db_user:kBPH0aeHduHxyN2z@cluster0.gughvlp.mongodb.net/mysuru_crime_db?retryWrites=true&w=majority")
 MODELS_READY = os.path.exists("models/random_forest_crime.pkl")
 MODEL_ACCURACIES = {}
+TRAINING_IN_PROGRESS = False
 
 DAYS   = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 MONTHS = ["January", "February", "March", "April", "May", "June",
@@ -107,19 +108,14 @@ def upload():
 
 @app.route("/train", methods=["POST"])
 def train():
-    global MODELS_READY
-    try:
-        df = _load_df()
-        if df.empty:
-            return jsonify({"status": "error", "message": "No data in database. Please upload a CSV file first."}), 400
-        results = train_models(df)
-        MODELS_READY = True
-        MODEL_ACCURACIES.update(results)
-        _send_high_risk_alerts(df)
-        return jsonify({"status": "success", "accuracies": results})
-    except Exception as e:
-        logger.error(f"Training error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+    global TRAINING_IN_PROGRESS
+    if TRAINING_IN_PROGRESS:
+        return jsonify({"status": "in_progress", "message": "Training already running."}), 202
+    df = _load_df()
+    if df.empty:
+        return jsonify({"status": "error", "message": "No data in database. Please upload a CSV file first."}), 400
+    _retrain_on_upload()
+    return jsonify({"status": "started", "message": "Training started in background."}), 202
 
 @app.route("/api/analytics")
 def api_analytics():
@@ -135,9 +131,10 @@ def api_status():
         count = 0
         db_status = "disconnected"
     return jsonify({
-        "models_ready": MODELS_READY,
-        "db_status":    db_status,
-        "record_count": count,
+        "models_ready":         MODELS_READY,
+        "training_in_progress": TRAINING_IN_PROGRESS,
+        "db_status":            db_status,
+        "record_count":         count,
     })
 
 @app.route("/api/compare")
@@ -358,9 +355,11 @@ def _send_high_risk_alerts(df):
 
 
 def _retrain_on_upload():
-    global MODELS_READY
+    global MODELS_READY, TRAINING_IN_PROGRESS
     import threading
     def _run():
+        global MODELS_READY, TRAINING_IN_PROGRESS
+        TRAINING_IN_PROGRESS = True
         try:
             df = _load_df()
             results = train_models(df)
@@ -370,6 +369,8 @@ def _retrain_on_upload():
             logger.info(f"Retrain complete on {len(df)} records. Accuracies: {results}")
         except Exception as e:
             logger.error(f"Retrain failed: {e}")
+        finally:
+            TRAINING_IN_PROGRESS = False
     threading.Thread(target=_run, daemon=True).start()
 
 def _startup_init():

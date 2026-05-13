@@ -9,7 +9,16 @@ class ApiService {
   static Future<void> trainModel() async {
     final res = await http.post(Uri.parse('$baseUrl/train'),
         headers: {'Content-Type': 'application/json'});
-    if (res.statusCode != 200) throw Exception('Training failed');
+    if (res.statusCode != 202 && res.statusCode != 200) {
+      throw Exception('Training failed');
+    }
+    // Poll until training completes
+    for (int i = 0; i < 60; i++) {
+      await Future.delayed(const Duration(seconds: 3));
+      final status = await getStatus();
+      if (status['training_in_progress'] == false) return;
+    }
+    throw Exception('Training timed out');
   }
 
   static Future<Map<String, dynamic>> getAnalytics() async {
