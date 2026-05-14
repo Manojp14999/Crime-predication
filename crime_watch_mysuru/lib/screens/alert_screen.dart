@@ -52,16 +52,17 @@ class _AlertScreenState extends State<AlertScreen> {
     }
     setState(() => _sending = true);
     try {
-      await ApiService.sendAlert(
-        area: _alertArea,
-        message: _msgController.text.trim(),
-        severity: _severity,
-      );
-      // Also show local notification immediately
+      // Show local notification immediately — no server dependency
       await NotificationService.showLocalAlert(
         title: '🚨 $_severity Alert — $_alertArea',
         body: _msgController.text.trim(),
       );
+      // Fire-and-forget server call (FCM push to other devices)
+      ApiService.sendAlert(
+        area: _alertArea,
+        message: _msgController.text.trim(),
+        severity: _severity,
+      ).catchError((_) {});
       if (mounted) {
         _msgController.clear();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -77,8 +78,9 @@ class _AlertScreenState extends State<AlertScreen> {
           SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFEF4444)),
         );
       }
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
-    setState(() => _sending = false);
   }
 
   Color _severityColor(String s) {
