@@ -1,4 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -13,32 +14,56 @@ class NotificationService {
   );
 
   static Future<void> init() async {
-    // Request permission
-    await FirebaseMessaging.instance.requestPermission(alert: true, badge: true, sound: true);
+    try {
+      // Request permission only on Android 13+ (API 33+)
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (e) {
+      debugPrint('Notification permission error: $e');
+    }
 
-    // Create Android notification channel
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+    try {
+      // Create Android notification channel
+      await _localNotifications
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(_channel);
+    } catch (e) {
+      debugPrint('Notification channel error: $e');
+    }
 
-    // Init local notifications
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _localNotifications.initialize(
-      const InitializationSettings(android: androidSettings),
-    );
+    try {
+      // Init local notifications
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
+      await _localNotifications.initialize(
+        const InitializationSettings(android: androidSettings),
+      );
+    } catch (e) {
+      debugPrint('Notification init error: $e');
+    }
 
-    // Foreground message handler
-    FirebaseMessaging.onMessage.listen((message) {
-      showLocalNotification(message);
-    });
+    try {
+      // Foreground message handler
+      FirebaseMessaging.onMessage.listen((message) {
+        showLocalNotification(message);
+      });
+    } catch (e) {
+      debugPrint('Foreground listener error: $e');
+    }
 
-    // Subscribe to all alerts topic
-    await FirebaseMessaging.instance.subscribeToTopic('crime_alerts');
-
-    // Get and print FCM token (useful for testing)
-    final token = await FirebaseMessaging.instance.getToken();
-    // ignore: avoid_print
-    print('FCM Token: $token');
+    try {
+      // Subscribe to all alerts topic
+      await FirebaseMessaging.instance.subscribeToTopic('crime_alerts');
+      // Get FCM token
+      final token = await FirebaseMessaging.instance.getToken();
+      debugPrint('FCM Token: $token');
+    } catch (e) {
+      debugPrint('FCM subscribe error: $e');
+    }
   }
 
   static Future<void> subscribeToArea(String area) async {
@@ -52,43 +77,50 @@ class NotificationService {
   }
 
   static void showLocalNotification(RemoteMessage message) {
-    final notification = message.notification;
-    if (notification == null) return;
-
-    _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          channelDescription: _channel.description,
-          importance: Importance.max,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+    try {
+      final notification = message.notification;
+      if (notification == null) return;
+      _localNotifications.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channel.id,
+            _channel.name,
+            channelDescription: _channel.description,
+            importance: Importance.max,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('showLocalNotification error: $e');
+    }
   }
 
   static Future<void> showLocalAlert({
     required String title,
     required String body,
   }) async {
-    await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          importance: Importance.max,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
+    try {
+      await _localNotifications.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            _channel.id,
+            _channel.name,
+            importance: Importance.max,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('showLocalAlert error: $e');
+    }
   }
 }
